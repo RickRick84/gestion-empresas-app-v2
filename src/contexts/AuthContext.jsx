@@ -12,29 +12,34 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const uid = firebaseUser.uid;
-        const userRef = doc(db, "usuarios", uid);
-        const docSnap = await getDoc(userRef);
+      try {
+        if (firebaseUser) {
+          const uid = firebaseUser.uid;
+          const userRef = doc(db, "usuarios", uid);
+          const docSnap = await getDoc(userRef);
 
-        if (docSnap.exists()) {
-          setRol(docSnap.data().rol || "empleado");
+          if (docSnap.exists()) {
+            setRol(docSnap.data().rol || "empleado");
+          } else {
+            await setDoc(userRef, {
+              email: firebaseUser.email,
+              rol: "empleado",
+            });
+            setRol("empleado");
+          }
+
+          setUser(firebaseUser);
         } else {
-          // Nuevo usuario: se guarda por defecto con rol 'empleado'
-          await setDoc(userRef, {
-            email: firebaseUser.email,
-            rol: "empleado"
-          });
-          setRol("empleado");
+          setUser(null);
+          setRol(null);
         }
-
-        setUser(firebaseUser);
-      } else {
+      } catch (err) {
+        console.error("❌ Error en AuthContext useEffect:", err);
         setUser(null);
         setRol(null);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
     return () => unsubscribe();
