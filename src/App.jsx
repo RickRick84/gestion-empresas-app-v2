@@ -17,13 +17,13 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return null;
+  if (loading) return <div className="p-8 text-gray-600">Cargando sesión...</div>;
   return user ? children : <Navigate to="/login" replace />;
 }
 
 function AdminRoute({ children }) {
   const { user, rol, loading } = useAuth();
-  if (loading) return null;
+  if (loading) return <div className="p-8 text-gray-600">Cargando sesión...</div>;
   return user && rol === 'admin' ? children : <Navigate to="/dashboard" replace />;
 }
 
