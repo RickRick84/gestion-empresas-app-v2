@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+} from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../../firebaseConfig';
 import { useNavigate } from 'react-router-dom';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 function Login() {
   const { user, logout, loading } = useAuth();
@@ -16,7 +21,7 @@ function Login() {
 
   useEffect(() => {
     if (!loading && user) {
-      navigate('/');
+      navigate('/dashboard');
     }
   }, [user, loading, navigate]);
 
@@ -34,10 +39,13 @@ function Login() {
     try {
       if (isRegistering) {
         await createUserWithEmailAndPassword(auth, email.trim(), password);
+        toast.success('Registro exitoso. Redirigiendo...');
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
+        toast.success('Bienvenido de nuevo');
       }
     } catch (err) {
+      console.error(err);
       setError('Email o contraseña incorrectos.');
     } finally {
       setLoadingForm(false);
@@ -59,6 +67,7 @@ function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black bg-opacity-90 px-4">
+      <ToastContainer />
       {user ? (
         <div className="text-center bg-white bg-opacity-10 p-6 rounded-lg shadow-lg text-white">
           <p className="text-green-400 text-lg mb-4">

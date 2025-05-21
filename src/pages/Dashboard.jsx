@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import { db } from '../../firebaseConfig';
-import {
-  collection,
-  getDocs
-} from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
+import { useAuth } from '../contexts/AuthContext';
 
 function Dashboard() {
+  const { user, rol, loading } = useAuth();
   const [facturas, setFacturas] = useState([]);
   const [proveedores, setProveedores] = useState([]);
   const [stock, setStock] = useState([]);
 
   useEffect(() => {
-    cargarDatos();
-  }, []);
+    if (user && rol) {
+      cargarDatos();
+    }
+  }, [user, rol]);
 
   const cargarDatos = async () => {
     const snapFacturas = await getDocs(collection(db, 'facturas'));
@@ -29,6 +30,10 @@ function Dashboard() {
   const totalCompras = proveedores.reduce((sum, f) => sum + (f.monto || 0), 0);
   const stockTotal = stock.reduce((sum, p) => sum + (p.cantidad || 0), 0);
   const balance = totalVentas - totalCompras;
+
+  if (loading) return <div className="p-8 text-gray-600">Cargando sesión...</div>;
+  if (!user) return <div className="p-8 text-red-500">No autenticado.</div>;
+  if (rol !== 'admin') return <div className="p-8 text-yellow-600">Acceso denegado. Rol insuficiente: {rol}</div>;
 
   return (
     <div className="min-h-screen flex bg-gray-100">
