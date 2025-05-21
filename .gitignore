@@ -1,0 +1,17 @@
+# Dependencias y cache
+node_modules/
+dist/
+.vite/
+.cache/
+
+# Configuración local
+.env
+.env.local
+.DS_Store
+*.log
+
+# Sistema operativo
+Thumbs.db
+
+# Vercel y otras plataformas
+.vercel/
