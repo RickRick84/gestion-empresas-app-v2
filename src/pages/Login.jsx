@@ -20,10 +20,11 @@ function Login() {
   const [loadingForm, setLoadingForm] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) {
-      navigate('/dashboard');
-    }
-  }, [user, loading, navigate]);
+  if (!loading && user) {
+    console.log("✅ Redirigiendo al dashboard...");
+    navigate('/dashboard');
+  }
+}, [user, loading, navigate]);
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
