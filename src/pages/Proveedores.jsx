@@ -14,6 +14,7 @@ import {
   uploadBytes,
   getDownloadURL
 } from 'firebase/storage';
+import { useNavigate } from 'react-router-dom';
 
 function Proveedores() {
   const [proveedor, setProveedor] = useState('');
@@ -22,13 +23,18 @@ function Proveedores() {
   const [monto, setMonto] = useState('');
   const [archivo, setArchivo] = useState(null);
   const [mensaje, setMensaje] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMensaje('');
+    setLoading(true);
 
     if (!proveedor || !cuit || !concepto || !monto) {
       setMensaje('Complete todos los campos obligatorios.');
+      setLoading(false);
       return;
     }
 
@@ -43,16 +49,41 @@ function Proveedores() {
 
       if (!snapshot.empty) {
         setMensaje('Ya existe una factura cargada para este proveedor con ese CUIT.');
+        setLoading(false);
         return;
       }
 
       let archivoUrl = '';
+      let nombreUnico = '';
 
       if (archivo) {
-        const nombreUnico = `${Date.now()}_${archivo.name}`;
+        const esValido = archivo.type.includes('pdf') || archivo.type.includes('image');
+        const esPequeño = archivo.size < 10 * 1024 * 1024;
+
+        if (!esValido) {
+          setMensaje('Solo se permiten archivos PDF o imágenes.');
+          setLoading(false);
+          return;
+        }
+
+        if (!esPequeño) {
+          setMensaje('El archivo no puede superar los 10 MB.');
+          setLoading(false);
+          return;
+        }
+
+        nombreUnico = `${Date.now()}_${archivo.name}`;
         const archivoRef = ref(storage, `facturas_proveedores/${nombreUnico}`);
-        await uploadBytes(archivoRef, archivo);
-        archivoUrl = await getDownloadURL(archivoRef);
+
+        try {
+          await uploadBytes(archivoRef, archivo);
+          archivoUrl = await getDownloadURL(archivoRef);
+        } catch (error) {
+          console.error('❌ Error al subir archivo:', error);
+          setMensaje('Error al subir el archivo.');
+          setLoading(false);
+          return;
+        }
       }
 
       const datos = {
@@ -62,20 +93,25 @@ function Proveedores() {
         monto: parseFloat(monto),
         fechaCarga: Timestamp.now(),
         archivoUrl,
-        archivoNombre: archivo?.name || 'Sin archivo'
+        archivoNombre: nombreUnico || 'Sin archivo'
       };
 
       await addDoc(collection(db, 'facturasProveedores'), datos);
-      setMensaje('Factura cargada y archivo guardado con éxito.');
-
+      setMensaje('Factura cargada con éxito.');
       setProveedor('');
       setCuit('');
       setConcepto('');
       setMonto('');
       setArchivo(null);
+
+      setTimeout(() => {
+        navigate('/proveedores/listado');
+      }, 1500);
     } catch (error) {
-      console.error('Error al guardar:', error);
+      console.error('❌ Error al guardar:', error);
       setMensaje('Error al guardar la factura.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -88,7 +124,9 @@ function Proveedores() {
 
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md max-w-xl space-y-4">
           {mensaje && (
-            <div className="text-center text-sm font-medium text-green-600">{mensaje}</div>
+            <div className={`text-center text-sm font-medium ${mensaje.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
+              {mensaje}
+            </div>
           )}
 
           <div>
@@ -147,9 +185,10 @@ function Proveedores() {
 
           <button
             type="submit"
+            disabled={loading}
             className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full"
           >
-            Cargar Factura
+            {loading ? 'Guardando...' : 'Cargar Factura'}
           </button>
         </form>
       </main>
