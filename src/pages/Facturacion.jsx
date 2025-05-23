@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import { db } from '../../firebaseConfig';
 import {
@@ -21,6 +21,20 @@ function Facturacion() {
   const [monto, setMonto] = useState('');
   const [detalle, setDetalle] = useState('');
   const [mensaje, setMensaje] = useState('');
+  const [productosStock, setProductosStock] = useState([]);
+
+  useEffect(() => {
+    const cargarProductos = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'stock'));
+        const lista = snap.docs.map(doc => doc.data().nombre).sort();
+        setProductosStock(lista);
+      } catch (error) {
+        console.error('❌ Error al cargar productos del stock:', error);
+      }
+    };
+    cargarProductos();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -130,14 +144,17 @@ function Facturacion() {
 
           <div>
             <label className="block text-gray-700 font-medium mb-1">Concepto (Producto) *</label>
-            <input
-              type="text"
+            <select
               className="w-full border border-gray-300 p-2 rounded"
-              placeholder="Nombre del producto"
               value={concepto}
               onChange={(e) => setConcepto(e.target.value)}
               required
-            />
+            >
+              <option value="">Seleccione un producto...</option>
+              {productosStock.map((nombre, i) => (
+                <option key={i} value={nombre}>{nombre}</option>
+              ))}
+            </select>
           </div>
 
           <div>
