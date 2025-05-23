@@ -27,6 +27,9 @@ const Sidebar = () => {
           <Link to="/proveedores" className={linkClass('/proveedores')}>
             Cargar Proveedores
           </Link>
+          <Link to="/proveedores/listado" className={linkClass('/proveedores/listado')}>
+            Ver Facturas Cargadas
+          </Link>
 
           {rol === 'admin' && (
             <>

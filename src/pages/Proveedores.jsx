@@ -39,7 +39,6 @@ function Proveedores() {
     }
 
     try {
-      // Verificar duplicado por proveedor + CUIT
       const q = query(
         collection(db, 'facturasProveedores'),
         where('proveedor', '==', proveedor),
@@ -191,6 +190,15 @@ function Proveedores() {
             {loading ? 'Guardando...' : 'Cargar Factura'}
           </button>
         </form>
+
+        <div className="mt-4 max-w-xl">
+          <button
+            onClick={() => navigate('/proveedores/listado')}
+            className="w-full border border-gray-300 text-gray-700 py-2 px-4 rounded hover:bg-gray-100"
+          >
+            Ver facturas cargadas
+          </button>
+        </div>
       </main>
     </div>
   );
