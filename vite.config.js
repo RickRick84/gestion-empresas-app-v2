@@ -16,4 +16,5 @@ export default defineConfig({
       '@': '/src',
     },
   },
+  envPrefix: 'VITE_',
 })

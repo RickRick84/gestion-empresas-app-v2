@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import { db } from '../../firebaseConfig';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 
 function Dashboard() {
@@ -11,20 +11,26 @@ function Dashboard() {
   const [stock, setStock] = useState([]);
 
   useEffect(() => {
-    if (user && rol) {
-      cargarDatos();
-    }
+    if (!user || !rol) return;
+
+    const unsubFacturas = onSnapshot(collection(db, 'facturas'), snap => {
+      setFacturas(snap.docs.map(doc => doc.data()));
+    });
+
+    const unsubProveedores = onSnapshot(collection(db, 'facturasProveedores'), snap => {
+      setProveedores(snap.docs.map(doc => doc.data()));
+    });
+
+    const unsubStock = onSnapshot(collection(db, 'stock'), snap => {
+      setStock(snap.docs.map(doc => doc.data()));
+    });
+
+    return () => {
+      unsubFacturas();
+      unsubProveedores();
+      unsubStock();
+    };
   }, [user, rol]);
-
-  const cargarDatos = async () => {
-    const snapFacturas = await getDocs(collection(db, 'facturas'));
-    const snapProveedores = await getDocs(collection(db, 'facturasProveedores'));
-    const snapStock = await getDocs(collection(db, 'stock'));
-
-    setFacturas(snapFacturas.docs.map(doc => doc.data()));
-    setProveedores(snapProveedores.docs.map(doc => doc.data()));
-    setStock(snapStock.docs.map(doc => doc.data()));
-  };
 
   const totalVentas = facturas.reduce((sum, f) => sum + (f.monto || 0), 0);
   const totalCompras = proveedores.reduce((sum, f) => sum + (f.monto || 0), 0);

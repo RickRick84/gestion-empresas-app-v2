@@ -24,6 +24,9 @@ const Sidebar = () => {
           <Link to="/facturacion" className={linkClass('/facturacion')}>
             Facturación
           </Link>
+          <Link to="/facturas" className={linkClass('/facturas')}>
+            Ver Facturas Generadas
+          </Link>
           <Link to="/proveedores" className={linkClass('/proveedores')}>
             Cargar Proveedores
           </Link>
