@@ -1,6 +1,8 @@
-{
-  "origin": ["https://gestion-empresas-app-v2.vercel.app"],
-  "method": ["GET", "POST", "PUT", "OPTIONS"],
-  "responseHeader": ["Content-Type", "Authorization"],
-  "maxAgeSeconds": 3600
-}
+[
+  {
+    "origin": ["https://gestion-empresas-app-v2.vercel.app"],
+    "method": ["GET", "POST", "PUT", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Authorization"],
+    "maxAgeSeconds": 3600
+  }
+]
