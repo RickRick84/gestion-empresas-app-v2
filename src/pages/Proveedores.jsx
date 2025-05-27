@@ -74,8 +74,6 @@ function Proveedores() {
         nombreUnico = `${Date.now()}_${archivo.name}`;
         const archivoRef = ref(storage, `facturas_proveedores/${nombreUnico}`);
 
-        console.log("🔥 Usuario actual:", auth.currentUser);
-
         try {
           await uploadBytes(archivoRef, archivo);
           archivoUrl = await getDownloadURL(archivoRef);
