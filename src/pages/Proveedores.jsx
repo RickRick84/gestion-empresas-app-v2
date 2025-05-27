@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Sidebar from '../components/Sidebar';
-import { db, storage } from '../../firebaseConfig';
+import { db, storage, auth } from '../../firebaseConfig';
 import {
   collection,
   addDoc,
