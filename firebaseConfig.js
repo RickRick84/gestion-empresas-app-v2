@@ -19,6 +19,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app, 'gs://gestion-empresas-app-v2.appspot.com');
+const storage = getStorage(app, 'gs://gestion-empresas-app-v2.firebasestorage.app');
 
 export { auth, db, storage };
