@@ -10,18 +10,24 @@ import {
   query
 } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { logActividad } from '../utils/logActividad';
 
 function ListadoProveedores() {
   const [registros, setRegistros] = useState([]);
   const [registrosFiltrados, setRegistrosFiltrados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mensaje, setMensaje] = useState('');
-  const [busqueda, setBusqueda] = useState('');
+
+  const [proveedorFiltro, setProveedorFiltro] = useState('');
+  const [conceptoFiltro, setConceptoFiltro] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [montoMin, setMontoMin] = useState('');
   const [montoMax, setMontoMax] = useState('');
+
+  const [proveedoresDisponibles, setProveedoresDisponibles] = useState([]);
+  const [conceptosDisponibles, setConceptosDisponibles] = useState([]);
 
   useEffect(() => {
     obtenerRegistros();
@@ -30,11 +36,12 @@ function ListadoProveedores() {
   useEffect(() => {
     let resultado = [...registros];
 
-    if (busqueda.trim() !== '') {
-      resultado = resultado.filter(f =>
-        f.proveedor.toLowerCase().includes(busqueda.toLowerCase()) ||
-        f.concepto.toLowerCase().includes(busqueda.toLowerCase())
-      );
+    if (proveedorFiltro) {
+      resultado = resultado.filter(f => f.proveedor === proveedorFiltro);
+    }
+
+    if (conceptoFiltro) {
+      resultado = resultado.filter(f => f.concepto === conceptoFiltro);
     }
 
     if (fechaInicio) {
@@ -56,7 +63,7 @@ function ListadoProveedores() {
     }
 
     setRegistrosFiltrados(resultado);
-  }, [busqueda, fechaInicio, fechaFin, montoMin, montoMax, registros]);
+  }, [proveedorFiltro, conceptoFiltro, fechaInicio, fechaFin, montoMin, montoMax, registros]);
 
   const obtenerRegistros = async () => {
     setLoading(true);
@@ -65,8 +72,14 @@ function ListadoProveedores() {
       const snap = await getDocs(q);
       const lista = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRegistros(lista);
+
+      // Cargar listas únicas para filtros
+      const proveedores = [...new Set(lista.map(r => r.proveedor))];
+      const conceptos = [...new Set(lista.map(r => r.concepto))];
+      setProveedoresDisponibles(proveedores);
+      setConceptosDisponibles(conceptos);
     } catch (error) {
-      console.error('Error al leer proveedores:', error);
+      console.error('❌ Error al leer proveedores:', error);
     } finally {
       setLoading(false);
     }
@@ -83,6 +96,13 @@ function ListadoProveedores() {
         await deleteObject(archivoRef);
       }
 
+      await logActividad({
+        tipo: 'baja',
+        modulo: 'proveedores',
+        descripcion: `Factura de proveedor eliminada: ${item.proveedor}, Concepto: ${item.concepto}, Monto: $${item.monto}`,
+        usuario: 'Admin'
+      });
+
       setMensaje('Registro eliminado correctamente.');
       obtenerRegistros();
     } catch (error) {
@@ -91,20 +111,44 @@ function ListadoProveedores() {
     }
   };
 
-  const exportarExcel = () => {
-    const data = registrosFiltrados.map(item => ({
-      Proveedor: item.proveedor,
-      CUIT: item.cuit,
-      Concepto: item.concepto,
-      Monto: item.monto,
-      Fecha: item.fechaCarga?.toDate().toLocaleDateString() || '',
-      Archivo: item.archivoNombre || 'Sin archivo'
-    }));
+  const exportarExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Facturas Proveedores');
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Proveedores');
-    XLSX.writeFile(wb, 'facturas_proveedores.xlsx');
+    sheet.columns = [
+      { header: 'Proveedor', key: 'proveedor', width: 25 },
+      { header: 'CUIT', key: 'cuit', width: 20 },
+      { header: 'Concepto', key: 'concepto', width: 25 },
+      { header: 'Monto', key: 'monto', width: 15 },
+      { header: 'Primer Vencimiento', key: 'venc1', width: 20 },
+      { header: 'Segundo Vencimiento', key: 'venc2', width: 20 },
+      { header: 'Observaciones', key: 'obs', width: 40 },
+      { header: 'Fecha de Carga', key: 'fechaCarga', width: 20 },
+      { header: 'Archivo', key: 'archivo', width: 35 }
+    ];
+
+    registrosFiltrados.forEach((r) => {
+      sheet.addRow({
+        proveedor: r.proveedor,
+        cuit: r.cuit,
+        concepto: r.concepto,
+        monto: r.monto,
+        venc1: r.primerVencimiento?.toDate().toLocaleDateString() || '',
+        venc2: r.segundoVencimiento?.toDate().toLocaleDateString() || '',
+        obs: r.observaciones || '',
+        fechaCarga: r.fechaCarga?.toDate().toLocaleDateString() || '',
+        archivo: r.archivoNombre || 'Sin archivo'
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'facturas_proveedores.xlsx';
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -114,18 +158,31 @@ function ListadoProveedores() {
       <main className="flex-1 p-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-4">Facturas de Proveedores</h1>
 
-        {mensaje && (
-          <p className="text-green-600 mb-4 font-medium">{mensaje}</p>
-        )}
+        {mensaje && <p className="text-green-600 mb-4 font-medium">{mensaje}</p>}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-          <input
-            type="text"
-            placeholder="Proveedor o concepto..."
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <select
+            value={proveedorFiltro}
+            onChange={(e) => setProveedorFiltro(e.target.value)}
             className="px-3 py-2 border rounded"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
+          >
+            <option value="">Proveedor...</option>
+            {proveedoresDisponibles.map((p, i) => (
+              <option key={i} value={p}>{p}</option>
+            ))}
+          </select>
+
+          <select
+            value={conceptoFiltro}
+            onChange={(e) => setConceptoFiltro(e.target.value)}
+            className="px-3 py-2 border rounded"
+          >
+            <option value="">Concepto...</option>
+            {conceptosDisponibles.map((c, i) => (
+              <option key={i} value={c}>{c}</option>
+            ))}
+          </select>
+
           <input
             type="date"
             className="px-3 py-2 border rounded"
@@ -163,16 +220,18 @@ function ListadoProveedores() {
         {loading ? (
           <p className="text-gray-600">Cargando registros...</p>
         ) : registrosFiltrados.length === 0 ? (
-          <p className="text-gray-600">No hay facturas cargadas.</p>
+          <p className="text-gray-600">No hay facturas encontradas.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full bg-white rounded-lg shadow-md text-sm">
+            <table className="w-full bg-white rounded shadow text-sm">
               <thead>
-                <tr className="bg-gray-200 text-left text-gray-700">
+                <tr className="bg-gray-200 text-gray-700 text-left">
                   <th className="p-3">Proveedor</th>
                   <th className="p-3">CUIT</th>
                   <th className="p-3">Concepto</th>
                   <th className="p-3">Monto</th>
+                  <th className="p-3">1° Vto</th>
+                  <th className="p-3">2° Vto</th>
                   <th className="p-3">Archivo</th>
                   <th className="p-3 text-center">Acciones</th>
                 </tr>
@@ -184,6 +243,8 @@ function ListadoProveedores() {
                     <td className="p-3">{item.cuit}</td>
                     <td className="p-3">{item.concepto}</td>
                     <td className="p-3">${item.monto.toFixed(2)}</td>
+                    <td className="p-3">{item.primerVencimiento?.toDate().toLocaleDateString() || '-'}</td>
+                    <td className="p-3">{item.segundoVencimiento?.toDate().toLocaleDateString() || '-'}</td>
                     <td className="p-3">
                       {item.archivoUrl ? (
                         <a

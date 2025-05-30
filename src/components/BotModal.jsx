@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 function BotModal({ onClose }) {
   const [input, setInput] = useState('');
@@ -6,41 +6,40 @@ function BotModal({ onClose }) {
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(false);
 
+  useEffect(() => {
+    setChat([
+      {
+        tipo: 'bot',
+        texto: 'Hola, soy tu Asistente Virtual. ¿Cómo puedo ayudarte?'
+      }
+    ]);
+  }, []);
+
   const enviarPregunta = async () => {
     if (!input.trim() || loading || cooldown) return;
 
+    const nuevaEntrada = { tipo: 'usuario', texto: input };
+    setChat(prev => [...prev, nuevaEntrada]);
+    setInput('');
     setLoading(true);
     setCooldown(true);
-    const nuevaEntrada = { tipo: 'usuario', texto: input };
-    setChat((prev) => [...prev, nuevaEntrada]);
-    setInput('');
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.OPENAI_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: 'Eres un asistente interno para empleados. Responde de forma clara y útil.' },
-            ...chat.map(m => ({ role: m.tipo === 'usuario' ? 'user' : 'assistant', content: m.texto })),
-            { role: 'user', content: input }
-          ]
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pregunta: input })
       });
 
       const data = await response.json();
-      const textoRespuesta = data.choices?.[0]?.message?.content || '[Sin respuesta]';
-      setChat((prev) => [...prev, { tipo: 'bot', texto: textoRespuesta }]);
+      const textoRespuesta = data.respuesta || '[Sin respuesta]';
+      setChat(prev => [...prev, { tipo: 'bot', texto: textoRespuesta }]);
     } catch (err) {
       console.error(err);
-      setChat((prev) => [...prev, { tipo: 'bot', texto: '[Error al conectar con el bot]' }]);
+      setChat(prev => [...prev, { tipo: 'bot', texto: '[Error al conectar con el bot]' }]);
     } finally {
       setLoading(false);
-      setTimeout(() => setCooldown(false), 5000); // ⏳ 5 segundos de espera
+      setTimeout(() => setCooldown(false), 5000);
     }
   };
 

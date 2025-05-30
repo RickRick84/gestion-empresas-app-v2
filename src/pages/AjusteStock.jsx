@@ -7,8 +7,10 @@ import {
   updateDoc,
   doc,
   orderBy,
-  query
+  query,
+  Timestamp
 } from 'firebase/firestore';
+import { logActividad } from '../utils/logActividad';
 
 function AjusteStock() {
   const [productos, setProductos] = useState([]);
@@ -44,9 +46,16 @@ function AjusteStock() {
 
     try {
       await updateDoc(doc(db, 'stock', id), { cantidad: nuevoStock });
+
+      await logActividad({
+        tipo: 'ajuste',
+        modulo: 'stock',
+        descripcion: `Ajuste manual: ${producto.nombre}, -${ajuste.cantidad} ${producto.unidad || 'unidad(es)'}. Motivo: ${ajuste.motivo || 'sin especificar'}`
+      });
+
       setMensaje(`Stock ajustado para "${producto.nombre}".`);
       obtenerStock();
-      setAjustes((prev) => ({ ...prev, [id]: { cantidad: '', motivo: '' } }));
+      setAjustes(prev => ({ ...prev, [id]: { cantidad: '', motivo: '' } }));
     } catch (err) {
       console.error('❌ Error al ajustar stock:', err);
       setMensaje('Error al ajustar el stock.');
@@ -63,6 +72,15 @@ function AjusteStock() {
     }));
   };
 
+  const esProximoAVencer = (fecha) => {
+    if (!fecha?.toDate) return false;
+    const hoy = new Date();
+    const vencimiento = fecha.toDate();
+    const unMesAntes = new Date(vencimiento);
+    unMesAntes.setMonth(unMesAntes.getMonth() - 1);
+    return hoy >= unMesAntes && hoy < vencimiento;
+  };
+
   return (
     <div className="min-h-screen flex bg-gray-100">
       <Sidebar />
@@ -77,44 +95,53 @@ function AjusteStock() {
             <thead>
               <tr className="bg-gray-200 text-gray-700">
                 <th className="p-3 text-left">Producto</th>
-                <th className="p-3 text-left">Stock Actual</th>
+                <th className="p-3 text-left">Cantidad</th>
+                <th className="p-3 text-left">Unidad</th>
+                <th className="p-3 text-left">Vence</th>
                 <th className="p-3 text-left">Descontar</th>
                 <th className="p-3 text-left">Motivo</th>
                 <th className="p-3 text-center">Acción</th>
               </tr>
             </thead>
             <tbody>
-              {productos.map((p) => (
-                <tr key={p.id} className="border-t hover:bg-gray-50">
-                  <td className="p-3">{p.nombre}</td>
-                  <td className="p-3">{p.cantidad}</td>
-                  <td className="p-3">
-                    <input
-                      type="number"
-                      className="w-20 border p-1 rounded"
-                      value={ajustes[p.id]?.cantidad || ''}
-                      onChange={(e) => actualizarCampo(p.id, 'cantidad', e.target.value)}
-                    />
-                  </td>
-                  <td className="p-3">
-                    <input
-                      type="text"
-                      className="w-full border p-1 rounded"
-                      value={ajustes[p.id]?.motivo || ''}
-                      onChange={(e) => actualizarCampo(p.id, 'motivo', e.target.value)}
-                      placeholder="Ej: Caja rota"
-                    />
-                  </td>
-                  <td className="p-3 text-center">
-                    <button
-                      onClick={() => aplicarAjuste(p.id)}
-                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded"
-                    >
-                      Aplicar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {productos.map((p) => {
+                const vencimiento = p.fechaVencimiento?.toDate().toLocaleDateString() || '-';
+                const alertaVto = esProximoAVencer(p.fechaVencimiento);
+
+                return (
+                  <tr key={p.id} className="border-t hover:bg-gray-50">
+                    <td className="p-3">{p.nombre}</td>
+                    <td className="p-3">{p.cantidad}</td>
+                    <td className="p-3">{p.unidad || '-'}</td>
+                    <td className={`p-3 ${alertaVto ? 'text-red-600 font-semibold' : ''}`}>{vencimiento}</td>
+                    <td className="p-3">
+                      <input
+                        type="number"
+                        className="w-20 border p-1 rounded"
+                        value={ajustes[p.id]?.cantidad || ''}
+                        onChange={(e) => actualizarCampo(p.id, 'cantidad', e.target.value)}
+                      />
+                    </td>
+                    <td className="p-3">
+                      <input
+                        type="text"
+                        className="w-full border p-1 rounded"
+                        value={ajustes[p.id]?.motivo || ''}
+                        onChange={(e) => actualizarCampo(p.id, 'motivo', e.target.value)}
+                        placeholder="Ej: Caja rota"
+                      />
+                    </td>
+                    <td className="p-3 text-center">
+                      <button
+                        onClick={() => aplicarAjuste(p.id)}
+                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded"
+                      >
+                        Aplicar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -8,15 +8,19 @@ import {
   updateDoc,
   doc,
   query,
-  orderBy
+  orderBy,
+  Timestamp
 } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { logActividad } from '../utils/logActividad';
 
 function Stock() {
   const [productos, setProductos] = useState([]);
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
+  const [unidad, setUnidad] = useState('unidad');
+  const [fechaElaboracion, setFechaElaboracion] = useState('');
+  const [fechaVencimiento, setFechaVencimiento] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [minCantidad, setMinCantidad] = useState('');
@@ -60,8 +64,8 @@ function Stock() {
 
   const agregarProducto = async (e) => {
     e.preventDefault();
-    if (!nombre || !cantidad) {
-      setMensaje('Debe completar ambos campos.');
+    if (!nombre || !cantidad || !unidad || !fechaElaboracion || !fechaVencimiento) {
+      setMensaje('Debe completar todos los campos obligatorios.');
       return;
     }
 
@@ -77,17 +81,23 @@ function Stock() {
       await addDoc(collection(db, 'stock'), {
         nombre: nombre.trim(),
         cantidad: parseInt(cantidad),
+        unidad,
+        fechaElaboracion: Timestamp.fromDate(new Date(fechaElaboracion)),
+        fechaVencimiento: Timestamp.fromDate(new Date(fechaVencimiento))
       });
 
       await logActividad({
         tipo: 'alta',
         modulo: 'stock',
-        descripcion: `Producto agregado: ${nombre.trim()} (${cantidad} unidades)`
+        descripcion: `Producto agregado: ${nombre.trim()} (${cantidad} ${unidad})`
       });
 
       setMensaje('Producto agregado correctamente.');
       setNombre('');
       setCantidad('');
+      setUnidad('unidad');
+      setFechaElaboracion('');
+      setFechaVencimiento('');
       obtenerStock();
     } catch (error) {
       console.error('❌ Error al agregar producto:', error);
@@ -116,23 +126,42 @@ function Stock() {
     }
   };
 
-  const exportarExcel = () => {
-    const data = filtrados.map(p => ({
-      Producto: p.nombre,
-      Cantidad: p.cantidad
-    }));
+  const exportarExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Stock');
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Stock');
-    XLSX.writeFile(wb, 'stock_actual.xlsx');
+    sheet.columns = [
+      { header: 'Producto', key: 'producto', width: 30 },
+      { header: 'Cantidad', key: 'cantidad', width: 15 },
+      { header: 'Unidad', key: 'unidad', width: 15 },
+      { header: 'Elaboración', key: 'elaboracion', width: 20 },
+      { header: 'Vencimiento', key: 'vencimiento', width: 20 }
+    ];
+
+    filtrados.forEach((p) => {
+      sheet.addRow({
+        producto: p.nombre,
+        cantidad: p.cantidad,
+        unidad: p.unidad,
+        elaboracion: p.fechaElaboracion?.toDate().toLocaleDateString() || '',
+        vencimiento: p.fechaVencimiento?.toDate().toLocaleDateString() || ''
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'stock_actual.xlsx';
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
     <div className="min-h-screen flex bg-gray-100">
       <Sidebar />
-
-      <main className="flex-1 p-8">
+      <main className="flex-1 p-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-4">Control de Stock</h1>
 
         {mensaje && (
@@ -141,63 +170,49 @@ function Stock() {
           </p>
         )}
 
-        <form onSubmit={agregarProducto} className="mb-6 bg-white p-4 rounded shadow-md max-w-md space-y-3">
+        <form onSubmit={agregarProducto} className="mb-4 bg-white p-4 rounded shadow-md max-w-lg space-y-3">
           <div>
             <label className="block font-medium mb-1">Nombre del Producto *</label>
-            <input
-              type="text"
-              className="w-full border p-2 rounded"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              required
-            />
+            <input type="text" className="w-full border p-2 rounded" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium mb-1">Cantidad *</label>
+              <input type="number" className="w-full border p-2 rounded" value={cantidad} onChange={(e) => setCantidad(e.target.value)} required />
+            </div>
+            <div>
+              <label className="block font-medium mb-1">Unidad *</label>
+              <select className="w-full border p-2 rounded" value={unidad} onChange={(e) => setUnidad(e.target.value)} required>
+                <option value="unidad">Unidad</option>
+                <option value="caja">Caja</option>
+                <option value="litros">Litros</option>
+                <option value="kg">Kg</option>
+                <option value="paquete">Paquete</option>
+              </select>
+            </div>
           </div>
 
           <div>
-            <label className="block font-medium mb-1">Cantidad *</label>
-            <input
-              type="number"
-              className="w-full border p-2 rounded"
-              value={cantidad}
-              onChange={(e) => setCantidad(e.target.value)}
-              required
-            />
+            <label className="block font-medium mb-1">Fecha de Elaboración *</label>
+            <input type="date" className="w-full border p-2 rounded" value={fechaElaboracion} onChange={(e) => setFechaElaboracion(e.target.value)} required />
           </div>
 
-          <button
-            type="submit"
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full"
-          >
+          <div>
+            <label className="block font-medium mb-1">Fecha de Vencimiento *</label>
+            <input type="date" className="w-full border p-2 rounded" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} required />
+          </div>
+
+          <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full">
             Agregar al Stock
           </button>
         </form>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-          <input
-            type="text"
-            placeholder="Buscar por nombre..."
-            className="px-3 py-2 border rounded"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
-          <input
-            type="number"
-            placeholder="Cantidad mínima"
-            className="px-3 py-2 border rounded"
-            value={minCantidad}
-            onChange={(e) => setMinCantidad(e.target.value)}
-          />
-          <input
-            type="number"
-            placeholder="Cantidad máxima"
-            className="px-3 py-2 border rounded"
-            value={maxCantidad}
-            onChange={(e) => setMaxCantidad(e.target.value)}
-          />
-          <button
-            onClick={exportarExcel}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 rounded"
-          >
+          <input type="text" placeholder="Buscar por nombre..." className="px-3 py-2 border rounded" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+          <input type="number" placeholder="Cantidad mínima" className="px-3 py-2 border rounded" value={minCantidad} onChange={(e) => setMinCantidad(e.target.value)} />
+          <input type="number" placeholder="Cantidad máxima" className="px-3 py-2 border rounded" value={maxCantidad} onChange={(e) => setMaxCantidad(e.target.value)} />
+          <button onClick={exportarExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2 rounded">
             Exportar Stock a Excel
           </button>
         </div>
@@ -208,29 +223,40 @@ function Stock() {
               <tr className="bg-gray-200 text-left text-gray-700">
                 <th className="p-3">Producto</th>
                 <th className="p-3">Cantidad</th>
+                <th className="p-3">Unidad</th>
+                <th className="p-3">Vencimiento</th>
                 <th className="p-3 text-center">Acción</th>
               </tr>
             </thead>
             <tbody>
-              {filtrados.map((item) => (
-                <tr key={item.id} className="border-t hover:bg-gray-50">
-                  <td className="p-3">{item.nombre}</td>
-                  <td className="p-3">{item.cantidad}</td>
-                  <td className="p-3 text-center">
-                    <button
-                      onClick={() => {
-                        const nueva = prompt('Nueva cantidad:', item.cantidad);
-                        if (nueva !== null && !isNaN(nueva)) {
-                          ajustarCantidad(item.id, parseInt(nueva));
-                        }
-                      }}
-                      className="text-blue-600 hover:underline text-sm"
-                    >
-                      Ajustar
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filtrados.map((item) => {
+                const diasRestantes = item.fechaVencimiento?.toDate() - new Date();
+                const alerta = diasRestantes <= 1000 * 60 * 60 * 24 * 30; // 30 días
+                return (
+                  <tr key={item.id} className="border-t hover:bg-gray-50">
+                    <td className="p-3">{item.nombre}</td>
+                    <td className="p-3">{item.cantidad}</td>
+                    <td className="p-3">{item.unidad}</td>
+                    <td className="p-3">
+                      {item.fechaVencimiento?.toDate().toLocaleDateString() || '-'}
+                      {alerta && <span className="ml-2 text-red-600 font-semibold">⚠ Próximo a vencer</span>}
+                    </td>
+                    <td className="p-3 text-center">
+                      <button
+                        onClick={() => {
+                          const nueva = prompt('Nueva cantidad:', item.cantidad);
+                          if (nueva !== null && !isNaN(nueva)) {
+                            ajustarCantidad(item.id, parseInt(nueva));
+                          }
+                        }}
+                        className="text-blue-600 hover:underline text-sm"
+                      >
+                        Ajustar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

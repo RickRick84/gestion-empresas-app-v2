@@ -15,6 +15,9 @@ import { logActividad } from '../utils/logActividad';
 
 function Facturacion() {
   const [cliente, setCliente] = useState('');
+  const [clientesDisponibles, setClientesDisponibles] = useState([]);
+  const [cuit, setCuit] = useState('');
+  const [iva, setIva] = useState('');
   const [fecha, setFecha] = useState('');
   const [concepto, setConcepto] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -24,6 +27,21 @@ function Facturacion() {
   const [productosStock, setProductosStock] = useState([]);
 
   useEffect(() => {
+    const cargarClientes = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'Clientes'));
+        const lista = snap.docs.map(doc => ({
+          id: doc.id,
+          nombre: doc.data().Nombre,
+          cuit: doc.data().CUIT,
+          iva: doc.data()['Status IVA']
+        }));
+        setClientesDisponibles(lista);
+      } catch (error) {
+        console.error('❌ Error al cargar clientes:', error);
+      }
+    };
+
     const cargarProductos = async () => {
       try {
         const snap = await getDocs(collection(db, 'stock'));
@@ -33,8 +51,22 @@ function Facturacion() {
         console.error('❌ Error al cargar productos del stock:', error);
       }
     };
+
+    cargarClientes();
     cargarProductos();
   }, []);
+
+  const handleClienteSeleccionado = (nombre) => {
+    setCliente(nombre);
+    const clienteEncontrado = clientesDisponibles.find(c => c.nombre === nombre);
+    if (clienteEncontrado) {
+      setCuit(clienteEncontrado.cuit);
+      setIva(clienteEncontrado.iva);
+    } else {
+      setCuit('');
+      setIva('');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -70,6 +102,8 @@ function Facturacion() {
 
       const factura = {
         cliente,
+        cuit,
+        iva,
         fecha: Timestamp.fromDate(new Date(fecha)),
         concepto,
         cantidad: cantidadSolicitada,
@@ -94,6 +128,8 @@ function Facturacion() {
       setMensaje(`Factura guardada y se descontaron ${cantidadSolicitada} unidades del stock.`);
 
       setCliente('');
+      setCuit('');
+      setIva('');
       setFecha('');
       setConcepto('');
       setCantidad('');
@@ -121,13 +157,36 @@ function Facturacion() {
 
           <div>
             <label className="block text-gray-700 font-medium mb-1">Cliente *</label>
+            <select
+              className="w-full border border-gray-300 p-2 rounded"
+              value={cliente}
+              onChange={(e) => handleClienteSeleccionado(e.target.value)}
+              required
+            >
+              <option value="">Seleccione un cliente...</option>
+              {clientesDisponibles.map((c, i) => (
+                <option key={i} value={c.nombre}>{c.nombre}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-gray-700 font-medium mb-1">CUIT</label>
             <input
               type="text"
-              className="w-full border border-gray-300 p-2 rounded"
-              placeholder="Nombre del cliente"
-              value={cliente}
-              onChange={(e) => setCliente(e.target.value)}
-              required
+              className="w-full border border-gray-300 p-2 rounded bg-gray-100"
+              value={cuit}
+              disabled
+            />
+          </div>
+
+          <div>
+            <label className="block text-gray-700 font-medium mb-1">Condición IVA</label>
+            <input
+              type="text"
+              className="w-full border border-gray-300 p-2 rounded bg-gray-100"
+              value={iva}
+              disabled
             />
           </div>
 

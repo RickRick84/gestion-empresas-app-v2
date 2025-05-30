@@ -15,3 +15,7 @@ Thumbs.db
 
 # Vercel y otras plataformas
 .vercel/
+
+# Protección de API privada
+/api/chat.js
+/api/

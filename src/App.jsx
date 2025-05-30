@@ -11,6 +11,7 @@ import Stock from './pages/Stock';
 import AjusteStock from './pages/AjusteStock';
 import Reportes from './pages/Reportes';
 import Historial from './pages/Historial';
+import Clientes from './pages/Clientes'; // ← Agregado
 
 import BotButton from './components/BotButton';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -60,6 +61,12 @@ function AppRoutes() {
         <Route path="/proveedores/listado" element={
           <ProtectedRoute>
             <ListadoProveedores />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/clientes" element={
+          <ProtectedRoute>
+            <Clientes />
           </ProtectedRoute>
         } />
 

@@ -1,23 +1,24 @@
+// Reportes.jsx versión refinada con dashboard profesional
 import React, { useEffect, useState, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
 import { db } from '../../firebaseConfig';
 import { collection, getDocs } from 'firebase/firestore';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, PieChart, Pie, Cell
 } from 'recharts';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 function Reportes() {
   const [facturasEmpresa, setFacturasEmpresa] = useState([]);
   const [facturasProveedores, setFacturasProveedores] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [periodo, setPeriodo] = useState('mensual');
   const graficoRef = useRef(null);
 
-  useEffect(() => {
-    obtenerDatos();
-  }, []);
+  useEffect(() => { obtenerDatos(); }, []);
 
   const obtenerDatos = async () => {
     try {
@@ -25,7 +26,6 @@ function Reportes() {
         getDocs(collection(db, 'facturas')),
         getDocs(collection(db, 'facturasProveedores'))
       ]);
-
       setFacturasEmpresa(snapEmpresa.docs.map(doc => doc.data()));
       setFacturasProveedores(snapProveedores.docs.map(doc => doc.data()));
     } catch (error) {
@@ -35,135 +35,191 @@ function Reportes() {
     }
   };
 
-  const totalVentas = facturasEmpresa.reduce((sum, f) => sum + (f.monto || 0), 0);
-  const totalCompras = facturasProveedores.reduce((sum, f) => sum + (f.monto || 0), 0);
+  const obtenerClave = (fecha, tipo) => {
+    const d = fecha.toDate ? fecha.toDate() : new Date(fecha);
+    const year = d.getFullYear();
+    const month = `${d.getMonth() + 1}`.padStart(2, '0');
+    const week = Math.ceil(d.getDate() / 7);
+    switch (tipo) {
+      case 'semanal': return `${year}-W${week}`;
+      case 'mensual': return `${year}-${month}`;
+      case 'semestral': return `${year}-S${d.getMonth() < 6 ? 1 : 2}`;
+      case 'anual': return `${year}`;
+      default: return `${year}-${month}`;
+    }
+  };
+
+  const resumen = {};
+  const productoMap = {};
+  const diaMap = {};
+  const pagoMap = { 'MP': 0, 'Transferencia': 0 };
+
+  facturasEmpresa.forEach(f => {
+    if (!f.monto || !f.fecha) return;
+    const clave = obtenerClave(f.fecha, periodo);
+    if (!resumen[clave]) resumen[clave] = { periodo: clave, Ventas: 0, Compras: 0 };
+    resumen[clave].Ventas += f.monto;
+
+    const producto = f.concepto || 'Desconocido';
+    productoMap[producto] = (productoMap[producto] || 0) + f.monto;
+
+    const d = f.fecha.toDate();
+    const dia = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    diaMap[dia] = (diaMap[dia] || 0) + f.monto;
+
+    const medio = f.medioPago || 'MP';
+    pagoMap[medio] = (pagoMap[medio] || 0) + f.monto;
+  });
+
+  facturasProveedores.forEach(f => {
+    if (!f.monto || !f.fechaCarga) return;
+    const clave = obtenerClave(f.fechaCarga, periodo);
+    if (!resumen[clave]) resumen[clave] = { periodo: clave, Ventas: 0, Compras: 0 };
+    resumen[clave].Compras += f.monto;
+  });
+
+  const resumenArr = Object.values(resumen).sort((a, b) => a.periodo.localeCompare(b.periodo));
+  const productosArr = Object.entries(productoMap).map(([nombre, monto]) => ({ nombre, monto }));
+  const diasArr = Object.entries(diaMap).map(([fecha, monto]) => ({ fecha, monto }));
+  const mediosArr = Object.entries(pagoMap).map(([medio, monto]) => ({ medio, monto }));
+
+  const totalVentas = resumenArr.reduce((acc, r) => acc + r.Ventas, 0);
+  const totalCompras = resumenArr.reduce((acc, r) => acc + r.Compras, 0);
   const balance = totalVentas - totalCompras;
+  const margen = totalVentas - totalCompras;
+  const margenPct = totalVentas > 0 ? (margen / totalVentas) * 100 : 0;
 
-  const generarResumenMensual = () => {
-    const resumen = {};
+  const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 
-    [...facturasEmpresa, ...facturasProveedores].forEach((f) => {
-      if (!f.fecha || !f.monto) return;
-      const fecha = f.fecha.toDate ? f.fecha.toDate() : new Date(f.fecha);
-      const key = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+  const exportarExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const resumenSheet = workbook.addWorksheet('Resumen');
+    resumenSheet.columns = [
+      { header: 'Periodo', key: 'periodo', width: 15 },
+      { header: 'Ventas', key: 'Ventas', width: 15 },
+      { header: 'Compras', key: 'Compras', width: 15 },
+      { header: 'Balance', key: 'Balance', width: 15 }
+    ];
+    resumenArr.forEach(row => resumenSheet.addRow({ ...row, Balance: row.Ventas - row.Compras }));
 
-      if (!resumen[key]) {
-        resumen[key] = { mes: key, Ventas: 0, Compras: 0 };
-      }
+    const prodSheet = workbook.addWorksheet('Ventas por Producto');
+    prodSheet.columns = [
+      { header: 'Producto', key: 'nombre', width: 30 },
+      { header: 'Monto', key: 'monto', width: 15 }
+    ];
+    productosArr.forEach(row => prodSheet.addRow(row));
 
-      if (facturasEmpresa.includes(f)) resumen[key].Ventas += f.monto;
-      if (facturasProveedores.includes(f)) resumen[key].Compras += f.monto;
-    });
+    const pagosSheet = workbook.addWorksheet('Medios de Pago');
+    pagosSheet.columns = [
+      { header: 'Medio', key: 'medio', width: 20 },
+      { header: 'Monto', key: 'monto', width: 15 }
+    ];
+    mediosArr.forEach(row => pagosSheet.addRow(row));
 
-    return Object.values(resumen).sort((a, b) => a.mes.localeCompare(b.mes));
-  };
-
-  const resumenMensual = generarResumenMensual();
-
-  const exportarPDF = () => {
-    if (!graficoRef.current) return;
-
-    toPng(graficoRef.current)
-      .then((dataUrl) => {
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const ancho = 180;
-        const alto = 100;
-
-        pdf.setFontSize(16);
-        pdf.text('Reporte General de Facturación', 15, 20);
-
-        pdf.setFontSize(12);
-        pdf.text(`Total Facturado: $${totalVentas.toFixed(2)}`, 15, 35);
-        pdf.text(`Total Proveedores: $${totalCompras.toFixed(2)}`, 15, 43);
-        pdf.text(`Balance General: $${balance.toFixed(2)}`, 15, 51);
-
-        pdf.text('Gráfico Resumen Mensual:', 15, 65);
-        pdf.addImage(dataUrl, 'PNG', 15, 70, ancho, alto);
-
-        pdf.save('reporte_facturacion.pdf');
-      })
-      .catch((err) => {
-        console.error('Error al exportar PDF:', err);
-      });
-  };
-
-  const exportarExcel = () => {
-    const data = resumenMensual.map(row => ({
-      Mes: row.mes,
-      Ventas: row.Ventas,
-      Compras: row.Compras
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Resumen');
-
-    XLSX.writeFile(workbook, 'reporte_facturacion.xlsx');
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'dashboard_reporte.xlsx';
+    link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   return (
     <div className="min-h-screen flex bg-gray-100">
       <Sidebar />
+      <main className="flex-1 p-6 space-y-6">
+        <h1 className="text-2xl font-bold text-gray-800">Dashboard de Reportes</h1>
 
-      <main className="flex-1 p-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">Reportes Generales</h1>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded shadow">
+            <h2 className="text-sm text-gray-500">Ventas Totales</h2>
+            <p className="text-xl font-bold text-green-600">${totalVentas.toFixed(2)}</p>
+          </div>
+          <div className="bg-white p-4 rounded shadow">
+            <h2 className="text-sm text-gray-500">Compras Totales</h2>
+            <p className="text-xl font-bold text-red-600">${totalCompras.toFixed(2)}</p>
+          </div>
+          <div className="bg-white p-4 rounded shadow">
+            <h2 className="text-sm text-gray-500">Margen $</h2>
+            <p className="text-xl font-bold">${margen.toFixed(2)}</p>
+          </div>
+          <div className="bg-white p-4 rounded shadow">
+            <h2 className="text-sm text-gray-500">Margen %</h2>
+            <p className="text-xl font-bold">{margenPct.toFixed(1)}%</p>
+          </div>
+        </div>
 
-        {loading ? (
-          <p className="text-gray-600">Cargando datos...</p>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center mb-10">
-              <div className="bg-white shadow-md p-6 rounded-lg">
-                <h2 className="text-lg font-semibold text-gray-700 mb-2">Total Facturado</h2>
-                <p className="text-2xl text-green-600 font-bold">${totalVentas.toFixed(2)}</p>
-              </div>
-              <div className="bg-white shadow-md p-6 rounded-lg">
-                <h2 className="text-lg font-semibold text-gray-700 mb-2">Total Proveedores</h2>
-                <p className="text-2xl text-red-600 font-bold">${totalCompras.toFixed(2)}</p>
-              </div>
-              <div className="bg-white shadow-md p-6 rounded-lg">
-                <h2 className="text-lg font-semibold text-gray-700 mb-2">Balance General</h2>
-                <p className={`text-2xl font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                  ${balance.toFixed(2)}
-                </p>
-              </div>
-            </div>
+        <div className="flex justify-end">
+          <select value={periodo} onChange={e => setPeriodo(e.target.value)} className="border p-2 rounded">
+            <option value="semanal">Semanal</option>
+            <option value="mensual">Mensual</option>
+            <option value="semestral">Semestral</option>
+            <option value="anual">Anual</option>
+          </select>
+        </div>
 
-            <div className="bg-white shadow-md p-6 rounded-lg">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-700">Resumen Mensual</h2>
-                <div className="flex gap-2">
-                  <button
-                    onClick={exportarPDF}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold"
-                  >
-                    Descargar PDF
-                  </button>
-                  <button
-                    onClick={exportarExcel}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-semibold"
-                  >
-                    Exportar Excel
-                  </button>
-                </div>
-              </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-white p-4 rounded shadow">
+            <h2 className="font-semibold mb-2">Resumen por {periodo}</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={resumenArr}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="periodo" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="Ventas" fill="#10b981" />
+                <Bar dataKey="Compras" fill="#ef4444" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
 
-              <div ref={graficoRef}>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={resumenMensual}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="mes" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Ventas" fill="#16a34a" />
-                    <Bar dataKey="Compras" fill="#dc2626" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </>
-        )}
+          <div className="bg-white p-4 rounded shadow">
+            <h2 className="font-semibold mb-2">Ventas por Producto</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart layout="vertical" data={productosArr}>
+                <XAxis type="number" />
+                <YAxis dataKey="nombre" type="category" />
+                <Tooltip />
+                <Bar dataKey="monto" fill="#3b82f6" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="bg-white p-4 rounded shadow">
+            <h2 className="font-semibold mb-2">Ventas Diarias</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={diasArr}>
+                <XAxis dataKey="fecha" />
+                <YAxis />
+                <Tooltip />
+                <Line type="monotone" dataKey="monto" stroke="#6366f1" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="bg-white p-4 rounded shadow">
+            <h2 className="font-semibold mb-2">Medios de Pago</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie data={mediosArr} dataKey="monto" nameKey="medio" cx="50%" cy="50%" outerRadius={100}>
+                  {mediosArr.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="text-right">
+          <button
+            onClick={exportarExcel}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2 rounded shadow"
+          >Exportar Excel</button>
+        </div>
       </main>
     </div>
   );

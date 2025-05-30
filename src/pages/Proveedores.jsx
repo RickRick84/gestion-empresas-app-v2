@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
-import { db, storage, auth } from '../../firebaseConfig';
+import { db, storage } from '../../firebaseConfig';
 import {
   collection,
   addDoc,
@@ -15,24 +15,42 @@ import {
   getDownloadURL
 } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
+import { logActividad } from '../utils/logActividad';
 
 function Proveedores() {
   const [proveedor, setProveedor] = useState('');
+  const [proveedoresDisponibles, setProveedoresDisponibles] = useState([]);
   const [cuit, setCuit] = useState('');
   const [concepto, setConcepto] = useState('');
   const [monto, setMonto] = useState('');
+  const [primerVencimiento, setPrimerVencimiento] = useState('');
+  const [segundoVencimiento, setSegundoVencimiento] = useState('');
+  const [observaciones, setObservaciones] = useState('');
   const [archivo, setArchivo] = useState(null);
   const [mensaje, setMensaje] = useState('');
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const cargarProveedores = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'Clientes'));
+        const lista = snap.docs.map(doc => doc.data().Nombre);
+        setProveedoresDisponibles(lista);
+      } catch (err) {
+        console.error('❌ Error al cargar clientes:', err);
+      }
+    };
+    cargarProveedores();
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMensaje('');
     setLoading(true);
 
-    if (!proveedor || !cuit || !concepto || !monto) {
+    if (!proveedor || !cuit || !concepto || !monto || !primerVencimiento || !segundoVencimiento) {
       setMensaje('Complete todos los campos obligatorios.');
       setLoading(false);
       return;
@@ -90,17 +108,31 @@ function Proveedores() {
         cuit,
         concepto,
         monto: parseFloat(monto),
-        fechaCarga: Timestamp.now(),
+        primerVencimiento: Timestamp.fromDate(new Date(primerVencimiento)),
+        segundoVencimiento: Timestamp.fromDate(new Date(segundoVencimiento)),
+        observaciones: observaciones.trim(),
         archivoUrl,
-        archivoNombre: nombreUnico || 'Sin archivo'
+        archivoNombre: nombreUnico || 'Sin archivo',
+        fechaCarga: Timestamp.now()
       };
 
       await addDoc(collection(db, 'facturasProveedores'), datos);
+
+      await logActividad({
+        tipo: 'alta',
+        modulo: 'proveedores',
+        descripcion: `Factura cargada: ${proveedor}, CUIT ${cuit}, Monto $${monto}, Concepto: ${concepto}`,
+        usuario: 'desconocido'
+      });
+
       setMensaje('Factura cargada con éxito.');
       setProveedor('');
       setCuit('');
       setConcepto('');
       setMonto('');
+      setPrimerVencimiento('');
+      setSegundoVencimiento('');
+      setObservaciones('');
       setArchivo(null);
 
       setTimeout(() => {
@@ -130,13 +162,17 @@ function Proveedores() {
 
           <div>
             <label className="block font-medium mb-1">Nombre del Proveedor *</label>
-            <input
-              type="text"
+            <select
               className="w-full border p-2 rounded"
               value={proveedor}
               onChange={(e) => setProveedor(e.target.value)}
               required
-            />
+            >
+              <option value="">Seleccione un proveedor...</option>
+              {proveedoresDisponibles.map((nombre, i) => (
+                <option key={i} value={nombre}>{nombre}</option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -169,6 +205,38 @@ function Proveedores() {
               value={monto}
               onChange={(e) => setMonto(e.target.value)}
               required
+            />
+          </div>
+
+          <div>
+            <label className="block font-medium mb-1">Primer Vencimiento *</label>
+            <input
+              type="date"
+              className="w-full border p-2 rounded"
+              value={primerVencimiento}
+              onChange={(e) => setPrimerVencimiento(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-medium mb-1">Segundo Vencimiento *</label>
+            <input
+              type="date"
+              className="w-full border p-2 rounded"
+              value={segundoVencimiento}
+              onChange={(e) => setSegundoVencimiento(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-medium mb-1">Observaciones (opcional)</label>
+            <textarea
+              className="w-full border p-2 rounded"
+              rows={3}
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
             />
           </div>
 

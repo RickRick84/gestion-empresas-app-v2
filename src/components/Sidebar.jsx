@@ -42,11 +42,17 @@ const Sidebar = () => {
               <Link to="/stock/ajuste" className={linkClass('/stock/ajuste')}>
                 Ajuste Manual de Stock
               </Link>
+              <Link to="/clientes" className={linkClass('/clientes')}>
+                Clientes
+              </Link>
               <Link to="/reportes" className={linkClass('/reportes')}>
                 Reportes
               </Link>
               <Link to="/historial" className={linkClass('/historial')}>
                 Historial de Actividades
+              </Link>
+              <Link to="/personal" className={linkClass('/personal')}>
+                Personal
               </Link>
             </>
           )}
