@@ -2,14 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import { db } from '../../firebaseConfig';
 import {
-  collection,
-  addDoc,
-  Timestamp,
-  query,
-  where,
-  getDocs,
-  updateDoc,
-  doc
+  collection, addDoc, Timestamp, query, where, getDocs, updateDoc, doc
 } from 'firebase/firestore';
 import { logActividad } from '../utils/logActividad';
 
@@ -56,7 +49,7 @@ function Facturacion() {
     cargarProductos();
   }, []);
 
-  const handleClienteSeleccionado = (nombre) => {
+  const handleClienteInput = (nombre) => {
     setCliente(nombre);
     const clienteEncontrado = clientesDisponibles.find(c => c.nombre === nombre);
     if (clienteEncontrado) {
@@ -98,6 +91,16 @@ function Facturacion() {
       if (stockActual < cantidadSolicitada) {
         setMensaje(`Stock insuficiente para "${concepto}". Solo hay ${stockActual} unidades disponibles.`);
         return;
+      }
+
+      // Verificar si cliente ya existe
+      const clienteExiste = clientesDisponibles.find(c => c.nombre === cliente);
+      if (!clienteExiste) {
+        await addDoc(collection(db, 'Clientes'), {
+          Nombre: cliente,
+          CUIT: cuit,
+          'Status IVA': iva
+        });
       }
 
       const factura = {
@@ -144,7 +147,6 @@ function Facturacion() {
   return (
     <div className="min-h-screen flex bg-gray-100">
       <Sidebar />
-
       <main className="flex-1 p-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">Facturación</h1>
 
@@ -157,26 +159,28 @@ function Facturacion() {
 
           <div>
             <label className="block text-gray-700 font-medium mb-1">Cliente *</label>
-            <select
+            <input
+              type="text"
+              list="clientes"
               className="w-full border border-gray-300 p-2 rounded"
               value={cliente}
-              onChange={(e) => handleClienteSeleccionado(e.target.value)}
+              onChange={(e) => handleClienteInput(e.target.value)}
               required
-            >
-              <option value="">Seleccione un cliente...</option>
+            />
+            <datalist id="clientes">
               {clientesDisponibles.map((c, i) => (
-                <option key={i} value={c.nombre}>{c.nombre}</option>
+                <option key={i} value={c.nombre} />
               ))}
-            </select>
+            </datalist>
           </div>
 
           <div>
             <label className="block text-gray-700 font-medium mb-1">CUIT</label>
             <input
               type="text"
-              className="w-full border border-gray-300 p-2 rounded bg-gray-100"
+              className="w-full border border-gray-300 p-2 rounded"
               value={cuit}
-              disabled
+              onChange={(e) => setCuit(e.target.value)}
             />
           </div>
 
@@ -184,9 +188,9 @@ function Facturacion() {
             <label className="block text-gray-700 font-medium mb-1">Condición IVA</label>
             <input
               type="text"
-              className="w-full border border-gray-300 p-2 rounded bg-gray-100"
+              className="w-full border border-gray-300 p-2 rounded"
               value={iva}
-              disabled
+              onChange={(e) => setIva(e.target.value)}
             />
           </div>
 

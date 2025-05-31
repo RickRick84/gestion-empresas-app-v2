@@ -5,10 +5,10 @@ import {
   collection,
   getDocs,
   updateDoc,
+  deleteDoc,
   doc,
   orderBy,
-  query,
-  Timestamp
+  query
 } from 'firebase/firestore';
 import { logActividad } from '../utils/logActividad';
 
@@ -62,6 +62,28 @@ function AjusteStock() {
     }
   };
 
+  const eliminarProducto = async (id) => {
+    const confirmar = window.confirm('¿Está seguro que desea eliminar este producto del stock?');
+    if (!confirmar) return;
+
+    const producto = productos.find(p => p.id === id);
+    try {
+      await deleteDoc(doc(db, 'stock', id));
+
+      await logActividad({
+        tipo: 'baja',
+        modulo: 'stock',
+        descripcion: `Producto eliminado manualmente: ${producto.nombre}`
+      });
+
+      setMensaje(`Producto "${producto.nombre}" eliminado del stock.`);
+      obtenerStock();
+    } catch (error) {
+      console.error('❌ Error al eliminar producto:', error);
+      setMensaje('No se pudo eliminar el producto.');
+    }
+  };
+
   const actualizarCampo = (id, campo, valor) => {
     setAjustes(prev => ({
       ...prev,
@@ -84,7 +106,6 @@ function AjusteStock() {
   return (
     <div className="min-h-screen flex bg-gray-100">
       <Sidebar />
-
       <main className="flex-1 p-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-4">Ajuste Manual de Stock</h1>
 
@@ -131,12 +152,18 @@ function AjusteStock() {
                         placeholder="Ej: Caja rota"
                       />
                     </td>
-                    <td className="p-3 text-center">
+                    <td className="p-3 text-center space-x-1">
                       <button
                         onClick={() => aplicarAjuste(p.id)}
-                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs"
                       >
-                        Aplicar
+                        Ajustar
+                      </button>
+                      <button
+                        onClick={() => eliminarProducto(p.id)}
+                        className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs"
+                      >
+                        Eliminar
                       </button>
                     </td>
                   </tr>

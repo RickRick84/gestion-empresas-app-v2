@@ -2,17 +2,10 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import { db, storage } from '../../firebaseConfig';
 import {
-  collection,
-  addDoc,
-  Timestamp,
-  getDocs,
-  query,
-  where
+  collection, addDoc, Timestamp, getDocs, query, where
 } from 'firebase/firestore';
 import {
-  ref,
-  uploadBytes,
-  getDownloadURL
+  ref, uploadBytes, getDownloadURL
 } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
 import { logActividad } from '../utils/logActividad';
@@ -36,7 +29,10 @@ function Proveedores() {
     const cargarProveedores = async () => {
       try {
         const snap = await getDocs(collection(db, 'Clientes'));
-        const lista = snap.docs.map(doc => doc.data().Nombre);
+        const lista = snap.docs.map(doc => ({
+          nombre: doc.data().Nombre,
+          cuit: doc.data().CUIT
+        }));
         setProveedoresDisponibles(lista);
       } catch (err) {
         console.error('❌ Error al cargar clientes:', err);
@@ -44,6 +40,16 @@ function Proveedores() {
     };
     cargarProveedores();
   }, []);
+
+  const handleProveedorInput = (nombre) => {
+    setProveedor(nombre);
+    const proveedorExistente = proveedoresDisponibles.find(p => p.nombre === nombre);
+    if (proveedorExistente) {
+      setCuit(proveedorExistente.cuit);
+    } else {
+      setCuit('');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -103,6 +109,16 @@ function Proveedores() {
         }
       }
 
+      // Registrar proveedor si no existe
+      const proveedorExiste = proveedoresDisponibles.find(p => p.nombre === proveedor);
+      if (!proveedorExiste) {
+        await addDoc(collection(db, 'Clientes'), {
+          Nombre: proveedor,
+          CUIT: cuit,
+          'Status IVA': 'No informado'
+        });
+      }
+
       const datos = {
         proveedor,
         cuit,
@@ -149,7 +165,6 @@ function Proveedores() {
   return (
     <div className="min-h-screen flex bg-gray-100">
       <Sidebar />
-
       <main className="flex-1 p-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">Cargar Factura de Proveedor</h1>
 
@@ -162,17 +177,19 @@ function Proveedores() {
 
           <div>
             <label className="block font-medium mb-1">Nombre del Proveedor *</label>
-            <select
+            <input
+              type="text"
+              list="proveedores"
               className="w-full border p-2 rounded"
               value={proveedor}
-              onChange={(e) => setProveedor(e.target.value)}
+              onChange={(e) => handleProveedorInput(e.target.value)}
               required
-            >
-              <option value="">Seleccione un proveedor...</option>
-              {proveedoresDisponibles.map((nombre, i) => (
-                <option key={i} value={nombre}>{nombre}</option>
+            />
+            <datalist id="proveedores">
+              {proveedoresDisponibles.map((p, i) => (
+                <option key={i} value={p.nombre} />
               ))}
-            </select>
+            </datalist>
           </div>
 
           <div>

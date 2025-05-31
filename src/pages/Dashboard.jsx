@@ -3,9 +3,23 @@ import Sidebar from '../components/Sidebar';
 import { db } from '../../firebaseConfig';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+import { format, startOfWeek, addWeeks, isSameWeek } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 function Dashboard() {
   const { user, rol, loading } = useAuth();
+  const navigate = useNavigate();
+
   const [facturas, setFacturas] = useState([]);
   const [proveedores, setProveedores] = useState([]);
   const [stock, setStock] = useState([]);
@@ -56,6 +70,27 @@ function Dashboard() {
     );
   });
 
+  const generarDatosSemanas = () => {
+    const base = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const semanas = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const inicioSemana = addWeeks(base, -i);
+      const etiqueta = format(inicioSemana, 'dd/MM');
+      const ingreso = facturas
+        .filter(f => f.fecha?.toDate && isSameWeek(f.fecha.toDate(), inicioSemana, { weekStartsOn: 1 }))
+        .reduce((sum, f) => sum + (f.monto || 0), 0);
+      const egreso = proveedores
+        .filter(f => f.fechaCarga?.toDate && isSameWeek(f.fechaCarga.toDate(), inicioSemana, { weekStartsOn: 1 }))
+        .reduce((sum, f) => sum + (f.monto || 0), 0);
+      semanas.push({ semana: etiqueta, Ingresos: ingreso, Gastos: egreso });
+    }
+
+    return semanas;
+  };
+
+  const datosGrafico = generarDatosSemanas();
+
   if (loading) return <div className="p-8 text-gray-600">Cargando sesión...</div>;
   if (!user) return <div className="p-8 text-red-500">No autenticado.</div>;
   if (rol !== 'admin') return <div className="p-8 text-yellow-600">Acceso denegado. Rol insuficiente: {rol}</div>;
@@ -63,11 +98,10 @@ function Dashboard() {
   return (
     <div className="min-h-screen flex bg-gray-100">
       <Sidebar />
+      <main className="flex-1 p-8 space-y-8">
+        <h1 className="text-3xl font-bold text-gray-800">Panel Principal</h1>
 
-      <main className="flex-1 p-8 space-y-6">
-        <h1 className="text-3xl font-bold text-gray-800 mb-4">Panel Principal</h1>
-
-        {/* Resumen */}
+        {/* 🔢 KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <div className="bg-white shadow rounded p-6 text-center">
             <h2 className="text-sm text-gray-500">Facturado Total</h2>
@@ -89,10 +123,34 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Alertas */}
+        {/* 📉 Gráfico */}
+        <div className="bg-white rounded shadow p-6">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">Ingresos vs Gastos – últimas 6 semanas</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={datosGrafico}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="semana" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="Ingresos" fill="#22c55e" />
+              <Bar dataKey="Gastos" fill="#ef4444" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 🚨 Alertas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white border-l-4 border-yellow-500 p-6 rounded shadow">
-            <h2 className="text-lg font-semibold mb-2 text-yellow-700">Productos próximos a vencer</h2>
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-lg font-semibold text-yellow-700">Productos próximos a vencer</h2>
+              <button
+                onClick={() => navigate('/stock')}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                Ver más
+              </button>
+            </div>
             {stockProximoAVencer.length === 0 ? (
               <p className="text-gray-600 text-sm">No hay productos que venzan dentro de 30 días.</p>
             ) : (
@@ -107,7 +165,15 @@ function Dashboard() {
           </div>
 
           <div className="bg-white border-l-4 border-rose-600 p-6 rounded shadow">
-            <h2 className="text-lg font-semibold mb-2 text-rose-700">Vencimientos de pago próximos</h2>
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-lg font-semibold text-rose-700">Vencimientos de pago próximos</h2>
+              <button
+                onClick={() => navigate('/proveedores/listado')}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                Ver más
+              </button>
+            </div>
             {vencimientosProveedores.length === 0 ? (
               <p className="text-gray-600 text-sm">No hay vencimientos próximos en facturas de proveedores.</p>
             ) : (
@@ -123,26 +189,6 @@ function Dashboard() {
                 })}
               </ul>
             )}
-          </div>
-        </div>
-
-        {/* Accesos rápidos */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">
-          <div className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition">
-            <h2 className="text-xl font-semibold mb-1">Facturación</h2>
-            <p className="text-gray-600 text-sm">Crear y gestionar facturas.</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition">
-            <h2 className="text-xl font-semibold mb-1">Cargar Proveedores</h2>
-            <p className="text-gray-600 text-sm">Registrar compras externas.</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition">
-            <h2 className="text-xl font-semibold mb-1">Control de Stock</h2>
-            <p className="text-gray-600 text-sm">Ver y ajustar inventario.</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow hover:shadow-lg transition">
-            <h2 className="text-xl font-semibold mb-1">Reportes</h2>
-            <p className="text-gray-600 text-sm">Análisis visual y detallado.</p>
           </div>
         </div>
       </main>

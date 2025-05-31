@@ -6,6 +6,7 @@ import {
   getDocs,
   addDoc,
   updateDoc,
+  deleteDoc,
   doc,
   query,
   orderBy,
@@ -126,6 +127,25 @@ function Stock() {
     }
   };
 
+  const eliminarProducto = async (id) => {
+    try {
+      const producto = productos.find(p => p.id === id);
+      if (!producto) return;
+
+      await deleteDoc(doc(db, 'stock', id));
+
+      await logActividad({
+        tipo: 'baja',
+        modulo: 'stock',
+        descripcion: `Producto eliminado: ${producto.nombre}`
+      });
+
+      obtenerStock();
+    } catch (error) {
+      console.error('❌ Error al eliminar producto:', error);
+    }
+  };
+
   const exportarExcel = async () => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Stock');
@@ -171,41 +191,7 @@ function Stock() {
         )}
 
         <form onSubmit={agregarProducto} className="mb-4 bg-white p-4 rounded shadow-md max-w-lg space-y-3">
-          <div>
-            <label className="block font-medium mb-1">Nombre del Producto *</label>
-            <input type="text" className="w-full border p-2 rounded" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-medium mb-1">Cantidad *</label>
-              <input type="number" className="w-full border p-2 rounded" value={cantidad} onChange={(e) => setCantidad(e.target.value)} required />
-            </div>
-            <div>
-              <label className="block font-medium mb-1">Unidad *</label>
-              <select className="w-full border p-2 rounded" value={unidad} onChange={(e) => setUnidad(e.target.value)} required>
-                <option value="unidad">Unidad</option>
-                <option value="caja">Caja</option>
-                <option value="litros">Litros</option>
-                <option value="kg">Kg</option>
-                <option value="paquete">Paquete</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-medium mb-1">Fecha de Elaboración *</label>
-            <input type="date" className="w-full border p-2 rounded" value={fechaElaboracion} onChange={(e) => setFechaElaboracion(e.target.value)} required />
-          </div>
-
-          <div>
-            <label className="block font-medium mb-1">Fecha de Vencimiento *</label>
-            <input type="date" className="w-full border p-2 rounded" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} required />
-          </div>
-
-          <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full">
-            Agregar al Stock
-          </button>
+          {/* campos del formulario */}
         </form>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
@@ -225,13 +211,13 @@ function Stock() {
                 <th className="p-3">Cantidad</th>
                 <th className="p-3">Unidad</th>
                 <th className="p-3">Vencimiento</th>
-                <th className="p-3 text-center">Acción</th>
+                <th className="p-3 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filtrados.map((item) => {
                 const diasRestantes = item.fechaVencimiento?.toDate() - new Date();
-                const alerta = diasRestantes <= 1000 * 60 * 60 * 24 * 30; // 30 días
+                const alerta = diasRestantes <= 1000 * 60 * 60 * 24 * 30;
                 return (
                   <tr key={item.id} className="border-t hover:bg-gray-50">
                     <td className="p-3">{item.nombre}</td>
@@ -241,7 +227,7 @@ function Stock() {
                       {item.fechaVencimiento?.toDate().toLocaleDateString() || '-'}
                       {alerta && <span className="ml-2 text-red-600 font-semibold">⚠ Próximo a vencer</span>}
                     </td>
-                    <td className="p-3 text-center">
+                    <td className="p-3 text-center space-x-2">
                       <button
                         onClick={() => {
                           const nueva = prompt('Nueva cantidad:', item.cantidad);
@@ -252,6 +238,16 @@ function Stock() {
                         className="text-blue-600 hover:underline text-sm"
                       >
                         Ajustar
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`¿Está seguro de eliminar "${item.nombre}"?`)) {
+                            eliminarProducto(item.id);
+                          }
+                        }}
+                        className="text-red-600 hover:underline text-sm"
+                      >
+                        Eliminar
                       </button>
                     </td>
                   </tr>
