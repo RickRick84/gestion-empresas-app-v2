@@ -3,10 +3,7 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/"
-    }
+    { "source": "/(.*)", "destination": "/" }
   ],
   "headers": [
     {
@@ -18,10 +15,5 @@
         }
       ]
     }
-  ],
-  "functions": {
-    "api/chat.js": {
-      "runtime": "node@18.x"
-    }
-  }
+  ]
 }
