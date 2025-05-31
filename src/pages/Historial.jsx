@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import { db } from '../../firebaseConfig';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 function Historial() {
   const [registros, setRegistros] = useState([]);
@@ -46,19 +46,38 @@ function Historial() {
     }
   };
 
-  const exportarExcel = () => {
-    const data = filtrados.map(r => ({
-      Fecha: r.fecha?.toDate().toLocaleString() || '',
-      Módulo: r.modulo,
-      Tipo: r.tipo,
-      Usuario: r.usuario,
-      Descripción: r.descripcion
-    }));
+  const exportarExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Historial');
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Historial');
-    XLSX.writeFile(wb, 'auditoria_historial.xlsx');
+    sheet.columns = [
+      { header: 'Fecha', key: 'fecha', width: 25 },
+      { header: 'Módulo', key: 'modulo', width: 20 },
+      { header: 'Tipo', key: 'tipo', width: 15 },
+      { header: 'Usuario', key: 'usuario', width: 25 },
+      { header: 'Descripción', key: 'descripcion', width: 50 },
+    ];
+
+    filtrados.forEach(r => {
+      sheet.addRow({
+        fecha: r.fecha?.toDate().toLocaleString() || '',
+        modulo: r.modulo,
+        tipo: r.tipo,
+        usuario: r.usuario,
+        descripcion: r.descripcion,
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'auditoria_historial.xlsx';
+    link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   return (
